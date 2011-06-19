@@ -39,6 +39,10 @@ Build-type:          Simple
 Extra-source-files:  test/test.hs
 Cabal-version:       >=1.10
 
+source-repository head
+  type:     hg
+  location: https://dschuessler@bitbucket.org/dschuessler/haskell-aosd 
+
 Library
   Default-Extensions: ForeignFunctionInterface
   Exposed-modules: 
