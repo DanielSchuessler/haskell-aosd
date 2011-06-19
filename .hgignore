@@ -1,0 +1,8 @@
+syntax: glob
+aosd-text.h
+Graphics/Aosd/AOSD_TEXT_H.hsc
+**/tags
+dist
+tags
+aosd.h
+libaosd
