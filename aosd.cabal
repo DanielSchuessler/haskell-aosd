@@ -4,7 +4,7 @@
 Name:                aosd
 Version:             0.1.2
 Synopsis:            Bindings to libaosd, a library for Cairo-based on-screen displays
-Description:         
+Description:
  <http://www.atheme.org/project/libaosd>
  .
  @An advanced on screen display (OSD) library, which uses Cairo to create high quality rendered graphics to be overlaid on top of the screen.@
@@ -21,9 +21,9 @@ Description:
  .
  markup = pSized 50 (pUnlines [pItalic \"AOSD\",\"Example\"])
  .
- main = aosdFlash 
- \           defaultOpts 
- \           (textRenderer markup) &#123; alignment = Just AlignCenter, colour = orange &#125; 
+ main = aosdFlash
+ \           defaultOpts
+ \           (textRenderer markup) &#123; alignment = Just AlignCenter, colour = orange &#125;
  \           (symDurations 3000 3000)
  @
  .
@@ -33,7 +33,7 @@ License:             BSD3
 License-file:        LICENSE
 Author:              Daniel Schüssler
 Maintainer:          anotheraddress@gmx.de
--- Copyright:           
+-- Copyright:
 Category:            Graphics
 Build-type:          Simple
 Extra-source-files:  test/test.hs
@@ -41,22 +41,30 @@ Cabal-version:       >=1.10
 
 source-repository head
   type:     hg
-  location: https://dschuessler@bitbucket.org/dschuessler/haskell-aosd 
+  location: https://dschuessler@bitbucket.org/dschuessler/haskell-aosd
+
+Flag DebugMemory
+    Default: False
+    Manual: True
 
 Library
   Default-Extensions: ForeignFunctionInterface
-  Exposed-modules: 
-    Graphics.Aosd.AOSD_H 
+  Exposed-modules:
+    Graphics.Aosd.AOSD_H
     Graphics.Aosd
     Graphics.Aosd.Pango
-  Other-modules:       
+  Other-modules:
     Graphics.Aosd.Util
 
 
-  Build-depends:       colour, transformers, X11, base >= 4 && < 5, bindings-DSL >= 1.0.11, cairo >= 0.12, pango >= 0.12 
+  Build-depends:       monad-control, colour, transformers, X11, base >= 4 && < 5, bindings-DSL >= 1.0.11, cairo >= 0.12, pango >= 0.12
   Build-tools:         hsc2hs
   Pkgconfig-depends:   libaosd
   Default-language: Haskell2010
+
+  if(flag(DebugMemory))
+    Cpp-options: -DDEBUG_MEMORY
+
 
 Test-Suite test-aosd
     type:       exitcode-stdio-1.0

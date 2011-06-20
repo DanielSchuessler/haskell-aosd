@@ -1,8 +1,13 @@
 syntax: glob
 aosd-text.h
 Graphics/Aosd/AOSD_TEXT_H.hsc
-**/tags
 dist
 tags
 aosd.h
 libaosd
+*.hi
+*.o
+test/test
+test/leakTest
+*_stub.[ch]
+test/test.hp

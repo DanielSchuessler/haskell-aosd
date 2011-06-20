@@ -1,9 +1,15 @@
-{-# LANGUAGE ViewPatterns, NoMonomorphismRestriction #-}
+{-# LANGUAGE CPP, ViewPatterns, NoMonomorphismRestriction #-}
 module Graphics.Aosd.Util where
 import Graphics.Rendering.Pango.Enums
 import Control.Arrow
 import Data.Colour.SRGB
 import Graphics.Rendering.Cairo
+import Foreign.StablePtr
+import System.IO
+import Control.Monad
+import Foreign.Concurrent
+import Foreign.Ptr
+import Foreign.ForeignPtr(ForeignPtr)
 
 maybeDo :: Monad m => (a -> m ()) -> Maybe a -> m ()
 maybeDo f = maybe (return ()) f
@@ -63,3 +69,39 @@ rectCenterY r = fi (2 * rectTop r + rectHeight r) / 2
 setSourceColour :: Colour Double -> Double -> Render ()
 setSourceColour (toSRGB -> RGB r g b) a = setSourceRGBA r g b a
 
+debugMemory :: Bool
+putDebugMemory :: String -> String -> IO ()
+#ifdef DEBUG_MEMORY
+debugMemory = True
+putDebugMemory cxt msg = putStdErr (cxt ++ ": "++replicate (30 - length cxt) ' ' ++ msg)
+#else
+debugMemory = False
+putDebugMemory _ _ = return ()
+#endif
+
+showStablePtr ::  StablePtr a -> String
+showStablePtr = show . castStablePtrToPtr
+
+putStdErr :: String -> IO ()
+putStdErr = hPutStrLn stderr
+
+
+newStablePtrDebug :: String -> String -> a -> IO (StablePtr a)
+newStablePtrDebug cxt descr a = do
+    sp <- newStablePtr a
+    putDebugMemory cxt ("Created "++descr++" StablePtr: "++showStablePtr sp) 
+    return sp
+
+freeStablePtrDebug :: String -> String -> StablePtr a -> IO ()
+freeStablePtrDebug cxt descr sp = do
+    putDebugMemory cxt ("Freeing "++descr++" StablePtr: "++showStablePtr sp) 
+    freeStablePtr sp
+
+newForeignPtrDebug :: String -> String -> IO () -> Ptr a -> IO (ForeignPtr a)
+newForeignPtrDebug cxt descr finalizer p = do
+    fp <- newForeignPtr p 
+                (do
+                    putDebugMemory "ForeignPtr finalizer" ("Finalizing "++descr++" ForeignPtr made in "++cxt)   
+                    finalizer)
+    putDebugMemory cxt ("Created "++descr++" ForeignPtr: "++show fp)
+    return fp
