@@ -35,7 +35,7 @@ import Graphics.Rendering.Cairo
 import Graphics.Rendering.Cairo.Internal(runRender)
 import Data.Functor
 import Graphics.Rendering.Pango.Enums
-import Graphics.X11.Xlib(openDisplay,displayHeight,displayWidth,defaultScreen)
+import Graphics.X11.Xlib(openDisplay,closeDisplay,displayHeight,displayWidth,defaultScreen)
 
 class AosdRenderer a where
     toGeneralRenderer :: a -> IO GeneralRenderer
@@ -154,6 +154,24 @@ withConfiguredAosd opts x k =
     )
 
 
+data ScreenSize = ScreenSize { screenWidth, screenHeight :: Int }
+    deriving(Show)
+
+
+
+getScreenSize :: IO ScreenSize
+getScreenSize = do
+        display <- openDisplay ""
+
+        let go = do
+                -- Work around unsafe FFI declarations in the X11 bindings...
+                screen <- evaluate $ defaultScreen display
+                screenWidth <- evaluate . fromIntegral $ displayWidth display screen
+                screenHeight <- evaluate . fromIntegral $ displayHeight display screen
+
+                return ScreenSize{..}
+
+        go `finally` closeDisplay display
 
 reconfigure0 :: AosdRenderer a => AosdOptions -> a -> Ptr C'Aosd -> IO ()
 reconfigure0 AosdOptions{..} renderer a = do
@@ -162,11 +180,7 @@ reconfigure0 AosdOptions{..} renderer a = do
         
         maybeDo (c'aosd_set_transparency a . toAosdTransparency) transparency
 
-        display <- openDisplay ""
-        let screen = defaultScreen display
-            screenWidth = fromIntegral $ displayWidth display screen
-            screenHeight = fromIntegral $ displayHeight display screen
-
+        ScreenSize{..} <- getScreenSize
 
 
         let -- l=Left, t=Top, w=Width, h=Height 
