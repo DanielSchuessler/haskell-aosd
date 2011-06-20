@@ -38,7 +38,7 @@ tagsTest = goText 7000 (\x -> x { colour=green }) tagsMarkup
 
 
 alignmentsTest = do
-    sequence_ [ goText 2000 (\x -> x { width = Just width, 
+    sequence_ [ goText 1000 (\x -> x { width = Just width, 
                                        wrapMode = wrap, 
                                        alignment = Just al, 
                                        colour = magenta }) 
