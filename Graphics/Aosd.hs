@@ -25,113 +25,29 @@ module Graphics.Aosd(
 
     ) where
 
+import Control.Concurrent.MVar
+import Control.Exception
+import Control.Monad
 import Control.Monad.Trans.Reader
 import Foreign.C
 import Foreign.ForeignPtr
 import Foreign.Ptr
 import Foreign.StablePtr
+import Foreign.Storable
 import Graphics.Aosd.AOSD_H
+import Graphics.Aosd.Options
+import Graphics.Aosd.Renderer
 import Graphics.Aosd.Util
+import Graphics.Aosd.XUtil
 import Graphics.Rendering.Cairo
 import Graphics.Rendering.Cairo.Internal(runRender,Cairo)
 import Graphics.Rendering.Pango.Enums
-import Graphics.X11.Xlib(openDisplay,closeDisplay,displayHeight,displayWidth,defaultScreen)
 import System.IO.Unsafe
-import Foreign.Storable
-import Control.Exception
-import Control.Concurrent.MVar
 import System.Mem.Weak
-import Control.Monad
 
 
-class AosdRenderer a where
-    toGeneralRenderer :: a -> IO GeneralRenderer
 
 
-data XClassHint = XClassHint { resName, resClass :: String }
-    deriving(Show)
-
-data Transparency = None | Fake | Composite
-    deriving(Show)
-
-data Position = Min -- ^ Left/top
-              | Center
-              | Max -- ^ Right/bottom
-    deriving(Show,Enum,Bounded)
-
-data AosdOptions = AosdOptions {
-    -- | 'Nothing' = use /libaosd/ default.
-    classHint :: Maybe XClassHint,
-    -- | 'Nothing' = use /libaosd/ default.
-    transparency :: Maybe Transparency,
-    xPos :: Position,
-    yPos :: Position,
-    -- | Positive values denote a rightwards respectively downwards offset (in pixels).
-    offset :: (CInt,CInt),
-    -- | 'Nothing' = use /libaosd/ default.
-    hideUponMouseEvent :: Maybe Bool,
-    -- | Mouse-click event handler.
-    mouseEventCB :: Maybe (C'AosdMouseEvent -> IO ())
-}
-
-data GeneralRenderer = GeneralRenderer {
-    grRender :: Render (),
-    -- | Part of the surface that the renderer actually draws on (determines the window size).
-    grInkExtent :: Rectangle,
-    -- | Part of the surface whose...
-    --
-    -- * ... left edge is aligned to the left edge of the screen, if 'xPos' is 'Min'
-    --
-    -- * ... center is aligned to the center of the screen, if 'xPos' is 'Center'
-    --
-    -- * ... right edge is aligned to the right edge of the screen, if 'xPos' is 'Max'
-    --
-    -- (Likewise for the /y/ axis)
-    grPositioningExtent :: Rectangle
-}
-
-
--- -- | Horizontal concatenation
--- data HCatRenderer = forall r1 r2. (AosdRenderer r1, AosdRenderer r2) => HCat r1 r2
---
---
--- -- | Vertical concatenation
--- data VCatRenderer = forall r1 r2. (AosdRenderer r1, AosdRenderer r2) => VCat r1 r2
-
-
-instance AosdRenderer GeneralRenderer where
-    toGeneralRenderer = return
-
--- instance AosdRenderer HCatRenderer where
---     toGeneralRenderer (HCat r1 r2) = do
---         gr1 <- toGeneralRenderer r1
---         gr2 <- toGeneralRenderer r2
---         return GeneralRenderer {
---                     grWidth = ((+) `on` grWidth) gr1 gr2,
---                     grHeight = (max `on` grHeight) gr1 gr2,
---                     grRender = do
---                         grRender gr1
---                         translate (fromIntegral $ grWidth gr1) 0
---                         grRender gr2
---                }
---
--- instance AosdRenderer VCatRenderer where
---     toGeneralRenderer (VCat r1 r2) = do
---         gr1 <- toGeneralRenderer r1
---         gr2 <- toGeneralRenderer r2
---         return GeneralRenderer {
---                     grWidth = (max `on` grWidth) gr1 gr2,
---                     grHeight = ((+) `on` grHeight) gr1 gr2,
---                     grRender = do
---                         grRender gr1
---                         translate 0 (fromIntegral $ grHeight gr1)
---                         grRender gr2
---                }
-
-toAosdTransparency :: Transparency -> C'AosdTransparency
-toAosdTransparency None = c'TRANSPARENCY_NONE
-toAosdTransparency Fake = c'TRANSPARENCY_FAKE
-toAosdTransparency Composite = c'TRANSPARENCY_COMPOSITE
 
 
 -- toAosdCoordinate :: Position -> C'AosdCoordinate
@@ -168,27 +84,6 @@ withConfiguredAosd opts x k =
         sp <- reconfigure0 opts x a
         k a `finally` freeStablePtrDebug "withConfiguredAosd" "renderer" sp
     )
-
-
-
-data ScreenSize = ScreenSize { screenWidth, screenHeight :: Int }
-    deriving(Show)
-
-
-
-getScreenSize :: IO ScreenSize
-getScreenSize = do
-        display <- openDisplay ""
-
-        let go = do
-                -- Work around unsafe FFI declarations in the X11 bindings...
-                screen <- evaluate $ defaultScreen display
-                screenWidth <- evaluate . fromIntegral $ displayWidth display screen
-                screenHeight <- evaluate . fromIntegral $ displayHeight display screen
-
-                return ScreenSize{..}
-
-        go `finally` closeDisplay display
 
 
 reconfigure0 :: (AosdRenderer renderer) => AosdOptions -> renderer -> Ptr C'Aosd -> IO (StablePtr Render0)
@@ -307,42 +202,6 @@ setMouseEventCB a f = do
         mouseEvent <- peek p
         f mouseEvent
 
--- | Non-'Nothing' defaults:
---
--- *       transparency = Just Composite,
---
--- *       xPos = Center,
---
--- *       yPos = Center,
---
--- *       offset = (0,0),
---
--- *       hideUponMouseEvent = Just True
-defaultOpts :: AosdOptions
-defaultOpts =
-    AosdOptions {
-        classHint = Nothing,
-        transparency = Just Composite,
-        xPos = Center,
-        yPos = Center,
-        offset = (0,0),
-        hideUponMouseEvent = Just True,
-        mouseEventCB = Nothing
-    }
-
-data FlashDurations = FlashDurations {
-    inMillis :: CUInt -- ^ Fade-in time in milliseconds
-  , fullMillis :: CUInt -- ^ Full display time in milliseconds
-  , outMillis :: CUInt -- ^ Fade-out time in milliseconds
-}
-    deriving(Show)
-
--- | Construct a 'FlashDurations' with equal 'inMillis' and 'outMillis'.
-symDurations ::
-        CUInt -- ^ 'inMillis' and 'outMillis'.
-     -> CUInt -- ^ 'fullMillis'.
-     -> FlashDurations
-symDurations fadeMillis fullMillis = FlashDurations fadeMillis fullMillis fadeMillis
 
 -- | Main high-level displayer. Blocks.
 aosdFlash :: (AosdRenderer a) => AosdOptions -> a -> FlashDurations -> IO ()
@@ -372,23 +231,6 @@ aosdNew opts r = do
     return AosdForeignPtr {unAosdPtr,afpRendererVar}
 
 
-debugRenderer :: GeneralRenderer
-debugRenderer =
-    GeneralRenderer {
-        grInkExtent = rect,
-        grPositioningExtent = rect,
-        grRender = do
-            liftIO (putStdErr "debugRenderer invoked")
-            setLineWidth lw
-            setSourceRGB  0 1 0
-            arc 0 0 (r - lw) 0 (2*pi)
-            stroke
-    }
-        where
-            rect = Rectangle (-r) (-r) (2*r) (2*r)
-            r :: Num a => a
-            r = 100
-            lw = 5
 
 
 autoFreeStablePtr :: String -> StablePtr a -> IO ()

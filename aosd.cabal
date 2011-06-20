@@ -54,7 +54,10 @@ Library
     Graphics.Aosd
     Graphics.Aosd.Pango
   Other-modules:
+    Graphics.Aosd.Options
+    Graphics.Aosd.Renderer
     Graphics.Aosd.Util
+    Graphics.Aosd.XUtil
 
 
   Build-depends:       monad-control, colour, transformers, X11, base >= 4 && < 5, bindings-DSL >= 1.0.11, cairo >= 0.12, pango >= 0.12
