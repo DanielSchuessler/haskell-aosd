@@ -287,6 +287,6 @@ freeAosdStructOwnedData cxt (AosdStructOwnedData sp_r) = do
 
 aosdDestroy :: AosdForeignPtr -> IO ()
 aosdDestroy (AosdForeignPtr p var) = do
-    c'aosd_destroy p
+    c'aosd_destroy_debug "aosdDestroy" p
     z <- readMVar var
     freeAosdStructOwnedData "aosdDestroy" z
