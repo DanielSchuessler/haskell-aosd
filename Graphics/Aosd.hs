@@ -12,7 +12,7 @@ module Graphics.Aosd(
     aosdFlash,
     FlashDurations(..), symDurations,
     -- ** Low-level operations
-    AosdForeignPtr,aosdNew,reconfigure,
+    AosdForeignPtr,aosdNew,aosdDestroy,reconfigure,
     aosdRender, aosdShow, aosdHide, aosdLoopOnce, aosdLoopFor,
 
     -- * Diagnostics
@@ -27,10 +27,8 @@ module Graphics.Aosd(
 
 import Control.Concurrent.MVar
 import Control.Exception
-import Control.Monad
 import Control.Monad.Trans.Reader
 import Foreign.C
-import Foreign.ForeignPtr
 import Foreign.Ptr
 import Foreign.StablePtr
 import Foreign.Storable
@@ -43,7 +41,6 @@ import Graphics.Rendering.Cairo
 import Graphics.Rendering.Cairo.Internal(runRender,Cairo)
 import Graphics.Rendering.Pango.Enums
 import System.IO.Unsafe
-import System.Mem.Weak
 
 
 
@@ -213,18 +210,16 @@ aosdFlash opts renderer durations = withConfiguredAosd opts renderer (aosdFlash'
 aosdFlash' :: FlashDurations -> Ptr C'Aosd -> IO ()
 aosdFlash' FlashDurations{..} a = (c'aosd_flash a inMillis fullMillis outMillis)
 
-data AosdForeignPtr = AosdForeignPtr { unAosdPtr :: !(ForeignPtr C'Aosd)
+data AosdForeignPtr = AosdForeignPtr { unAosdPtr :: !(Ptr C'Aosd)
                                         -- This has the sole purpose of keeping the AosdStructOwnedData alive
                                      , aosdStructOwnedDataVar :: !(MVar AosdStructOwnedData)
                                      }
 
 aosdNew :: (AosdRenderer renderer) => AosdOptions -> renderer -> IO AosdForeignPtr
 aosdNew opts r = do
-    p <- c'aosd_new_debug "aosdNew"
-    z <- reconfigure0 opts r p
-    autoFreeAosdStructOwnedData "aosdNew" z
+    unAosdPtr <- c'aosd_new_debug "aosdNew"
+    z <- reconfigure0 opts r unAosdPtr
     aosdStructOwnedDataVar <- newMVar z
-    unAosdPtr <- newForeignPtrDebug "aosdNew" "C'Aosd" (c'aosd_destroy p) p
 
     {-
         The ForeignPtr C'Aosd should keep the reference to its AosdStructOwnedData alive.
@@ -245,24 +240,10 @@ aosdNew opts r = do
 
     -}
 
-    _ <- mkWeak unAosdPtr aosdStructOwnedDataVar
-           (if debugMemory
-               then Just (putDebugMemory "Weak-finalizer in aosdNew" "Finalizing")
-               else Nothing)
-
     return AosdForeignPtr {unAosdPtr,aosdStructOwnedDataVar}
 
 
 
--- | Causes the StablePtrs contained in the AosdStructOwnedData @z@ to be freed when there
--- are no more references to @z@
-autoFreeAosdStructOwnedData :: String -> AosdStructOwnedData -> IO ()
-autoFreeAosdStructOwnedData createdIn z = void $ mkWeakPtr z (Just finalizer)
-    where
-        here = "Weak-finalizer for AosdStructOwnedData created in "++createdIn
-        finalizer = case z of 
-                        AosdStructOwnedData sp_r -> do 
-                            freeStablePtrDebug here "renderer" sp_r 
 
 reconfigure :: (AosdRenderer renderer) =>
         AosdOptions
@@ -271,29 +252,29 @@ reconfigure :: (AosdRenderer renderer) =>
      -> IO ()
 
 reconfigure opts r (AosdForeignPtr fp var) = modifyMVar_ var
-    (\_ -> do
-        zNew <- reconfigure0 opts r (unsafeForeignPtrToPtr fp)
-        autoFreeAosdStructOwnedData "reconfigure" zNew
+    (\zOld -> do
+        zNew <- reconfigure0 opts r fp
+        freeAosdStructOwnedData "reconfigure" zOld
         return zNew)
 
 
 aosdRender :: AosdForeignPtr -> IO ()
-aosdRender = (`withForeignPtr` c'aosd_render) . unAosdPtr
+aosdRender = (c'aosd_render) . unAosdPtr
 
 aosdShow :: AosdForeignPtr -> IO ()
-aosdShow = (`withForeignPtr` c'aosd_show) . unAosdPtr
+aosdShow = (c'aosd_show) . unAosdPtr
 
 aosdHide :: AosdForeignPtr -> IO ()
-aosdHide = (`withForeignPtr` c'aosd_hide) . unAosdPtr
+aosdHide = (c'aosd_hide) . unAosdPtr
 
 aosdLoopOnce :: AosdForeignPtr -> IO ()
-aosdLoopOnce = (`withForeignPtr` c'aosd_loop_once) . unAosdPtr
+aosdLoopOnce = (c'aosd_loop_once) . unAosdPtr
 
 aosdLoopFor ::
         AosdForeignPtr
      -> CUInt -- ^ Time in milliseconds.
      -> IO ()
-aosdLoopFor (AosdForeignPtr fp _) millis = (fp `withForeignPtr` (`c'aosd_loop_for` millis))
+aosdLoopFor (AosdForeignPtr fp _) millis = c'aosd_loop_for fp millis
 
 
 data AosdStructOwnedData = AosdStructOwnedData !(StablePtr (Cairo -> IO ()))
@@ -303,3 +284,9 @@ data AosdStructOwnedData = AosdStructOwnedData !(StablePtr (Cairo -> IO ()))
 freeAosdStructOwnedData :: String -> AosdStructOwnedData -> IO ()
 freeAosdStructOwnedData cxt (AosdStructOwnedData sp_r) = do
     freeStablePtrDebug cxt "renderer" sp_r
+
+aosdDestroy :: AosdForeignPtr -> IO ()
+aosdDestroy (AosdForeignPtr p var) = do
+    c'aosd_destroy p
+    z <- readMVar var
+    freeAosdStructOwnedData "aosdDestroy" z

@@ -11,3 +11,8 @@ test/test
 test/leakTest
 *_stub.[ch]
 test/test.hp
+test/gc.log
+test/leakTest.aux
+test/leakTest.hs
+test/leakTest.prof
+test/leakTest.ps
