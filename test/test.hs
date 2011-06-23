@@ -140,16 +140,15 @@ transparencyTest = goText 3000 (\s -> s { colour = lime, opacity = 0.5 })
 mouseEventTest = do
     let initialRen = textRenderer $ pSized 30 "Click me"
 
-    aosd <- aosdNew defaultOpts initialRen
 
-    let f ev = do
+    let f aosd ev = do
             reconfigure opts (textRenderer (pShow ev)) { colour = white, width = Just 400 } aosd
             aosdRender aosd
 
         opts = defaultOpts { mouseEventCB = Just f, hideUponMouseEvent = Just False }
 
 
-    reconfigure opts initialRen aosd
+    aosd <- aosdNew opts initialRen
 
     aosdFlash aosd (symDurations 100 10000)
     aosdDestroy aosd
