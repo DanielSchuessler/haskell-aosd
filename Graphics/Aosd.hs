@@ -40,6 +40,8 @@ import Graphics.Rendering.Cairo
 import Graphics.Rendering.Cairo.Internal(runRender,Cairo)
 import Graphics.Rendering.Pango.Enums
 import System.IO.Unsafe
+import Graphics.X11.Xlib(Display,openDisplay,closeDisplay)
+import Control.Exception
 
 
 
@@ -71,11 +73,11 @@ type Render0 = Cairo -> IO ()
 
 
 
-reconfigure0 :: (AosdRenderer renderer) => AosdOptions -> renderer -> Ptr C'Aosd -> IO AosdStructOwnedData
-reconfigure0 AosdOptions{..} renderer ptr = do
+reconfigure0 :: (AosdRenderer renderer) => Display -> AosdOptions -> renderer -> Ptr C'Aosd -> IO AosdStructOwnedData
+reconfigure0 display AosdOptions{..} renderer ptr = do
         GeneralRenderer{..} <- toGeneralRenderer renderer
 
-        ScreenSize{..} <- getScreenSize
+        ScreenSize{..} <- getScreenSize display
 
 
         let -- l=Left, t=Top, w=Width, h=Height
@@ -195,15 +197,17 @@ aosdFlash a FlashDurations{..} = wrapAosd (\p -> c'aosd_flash p inMillis fullMil
 data AosdForeignPtr = AosdForeignPtr { unAosdPtr :: !(Ptr C'Aosd)
                                         -- We only keep this around for deallocating
                                      , aosdStructOwnedDataVar :: !(MVar AosdStructOwnedData)
+                                     , display :: Display
                                      }
 
 aosdNew :: (AosdRenderer renderer) => AosdOptions -> renderer -> IO AosdForeignPtr
 aosdNew opts r = do
+    display <- openDisplay ""
     unAosdPtr <- c'aosd_new_debug "aosdNew"
-    z <- reconfigure0 opts r unAosdPtr
+    z <- reconfigure0 display opts r unAosdPtr
     aosdStructOwnedDataVar <- newMVar z
 
-    return AosdForeignPtr {unAosdPtr,aosdStructOwnedDataVar}
+    return AosdForeignPtr {unAosdPtr,aosdStructOwnedDataVar,display}
 
 
 
@@ -214,9 +218,9 @@ reconfigure :: (AosdRenderer renderer) =>
      -> AosdForeignPtr
      -> IO ()
 
-reconfigure opts r (AosdForeignPtr fp var) = modifyMVar_ var
+reconfigure opts r AosdForeignPtr {unAosdPtr,aosdStructOwnedDataVar,display} = modifyMVar_ aosdStructOwnedDataVar
     (\zOld -> do
-        zNew <- reconfigure0 opts r fp
+        zNew <- reconfigure0 display opts r unAosdPtr
         freeAosdStructOwnedData "reconfigure" zOld
         return zNew)
 
@@ -251,7 +255,8 @@ freeAosdStructOwnedData cxt (AosdStructOwnedData sp_r) = do
     freeStablePtrDebug cxt "renderer" sp_r
 
 aosdDestroy :: AosdForeignPtr -> IO ()
-aosdDestroy (AosdForeignPtr p var) = do
-    c'aosd_destroy_debug "aosdDestroy" p
-    z <- readMVar var
+aosdDestroy AosdForeignPtr {unAosdPtr,aosdStructOwnedDataVar,display} = mask_ $ do
+    c'aosd_destroy_debug "aosdDestroy" unAosdPtr
+    z <- readMVar aosdStructOwnedDataVar
     freeAosdStructOwnedData "aosdDestroy" z
+    closeDisplay display
