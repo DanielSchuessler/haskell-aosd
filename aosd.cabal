@@ -58,6 +58,7 @@ Library
     Graphics.Aosd.Options
     Graphics.Aosd.Renderer
     Graphics.Aosd.Util
+    Graphics.Aosd.CallbackUtil
     Graphics.Aosd.XUtil
 
 

@@ -3,6 +3,7 @@ module Graphics.Aosd.Options where
 
 import Graphics.Aosd.AOSD_H
 import Foreign.C.Types
+import {-# SOURCE #-} Graphics.Aosd
 
 data XClassHint = XClassHint { resName, resClass :: String }
     deriving(Show)
@@ -27,7 +28,7 @@ data AosdOptions = AosdOptions {
     -- | 'Nothing' = use /libaosd/ default.
     hideUponMouseEvent :: Maybe Bool,
     -- | Mouse-click event handler.
-    mouseEventCB :: Maybe (C'AosdMouseEvent -> IO ())
+    mouseEventCB :: Maybe (AosdPtr -> C'AosdMouseEvent -> IO ())
 }
 
 toAosdTransparency :: Transparency -> C'AosdTransparency

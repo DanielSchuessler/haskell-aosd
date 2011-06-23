@@ -135,3 +135,21 @@ doCircle xPos yPos = withAosd defaultOpts { xPos, yPos } GeneralRenderer{..} (fl
 
 transparencyTest = goText 3000 (\s -> s { colour = lime, opacity = 0.5 }) 
                     (pSized 100 "Transparency")
+
+
+mouseEventTest = do
+    let initialRen = textRenderer $ pSized 30 "Click me"
+
+    aosd <- aosdNew defaultOpts initialRen
+
+    let f ev = do
+            reconfigure opts (textRenderer (pShow ev)) { colour = white, width = Just 400 } aosd
+            aosdRender aosd
+
+        opts = defaultOpts { mouseEventCB = Just f, hideUponMouseEvent = Just False }
+
+
+    reconfigure opts initialRen aosd
+
+    aosdFlash aosd (symDurations 100 10000)
+    aosdDestroy aosd

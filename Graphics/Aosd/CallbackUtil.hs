@@ -15,7 +15,10 @@ type Callback a = a -> UserData -> IO ()
 -- delegates the @a@ to that @a -> IO ()@.
 newtype UniversalCallback a = UniversalCallback (FunPtr (Callback a))
 
-mkUniversalCallback :: forall a. (Callback a -> IO (FunPtr (Callback a))) -> IO (UniversalCallback a)
+mkUniversalCallback :: forall a. 
+       (Callback a -> IO (FunPtr (Callback a))) 
+        -- ^ Should be something obtained from a @foreign import ccall \"wrapper\" ...@ declaration 
+    -> IO (UniversalCallback a)
 mkUniversalCallback foreignImportWrapper = 
         UniversalCallback `fmap` foreignImportWrapper universalCallback
 

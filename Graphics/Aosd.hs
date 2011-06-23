@@ -45,6 +45,7 @@ import Graphics.Rendering.Pango.Enums
 import System.IO.Unsafe
 import Graphics.X11.Xlib(Display,openDisplay,closeDisplay)
 import Control.Exception
+import Data.Maybe
 
 
 
@@ -68,25 +69,12 @@ c'aosd_destroy_debug cxt p = do
     putDebugMemory cxt ("c'aosd_destroy "++show p)
     c'aosd_destroy p
 
-type MouseEventHandler = C'AosdMouseEvent -> IO ()
+type MouseEventHandler = AosdPtr -> C'AosdMouseEvent -> IO ()
 
 
 
+{- Position calculation comments:
 
-
-
-reconfigure0 :: (AosdRenderer renderer) => Display -> AosdOptions -> renderer -> Ptr C'Aosd -> IO AosdStructOwnedData
-reconfigure0 display AosdOptions{..} renderer ptr = do
-        GeneralRenderer{..} <- toGeneralRenderer renderer
-
-        ScreenSize{..} <- getScreenSize display
-
-
-        let -- l=Left, t=Top, w=Width, h=Height
-            Rectangle li ti wi hi = grInkExtent
-            Rectangle lp tp wp hp = grPositioningExtent
-
-{-
 (These comments only look at the x dimension; the other is analogous)
 
 Consider the mapping "screenx" from grRender x coordinates to screen x coordinates
@@ -120,6 +108,21 @@ If xPos is Max, we want:
         windowLeft = li - lp + screenWidth - wp
 
 -}
+
+
+-- | Must *NOT* access the aosdStructOwnedDataVar of the AosdPtr argument (-> deadlock).
+reconfigure0 :: (AosdRenderer renderer) => AosdOptions -> renderer -> AosdPtr -> IO AosdStructOwnedData
+reconfigure0 AosdOptions{..} renderer aosd@AosdPtr {unAosdPtr=ptr, display} = 
+    do
+        GeneralRenderer{..} <- toGeneralRenderer renderer
+
+        ScreenSize{..} <- getScreenSize display
+
+
+        let -- l=Left, t=Top, w=Width, h=Height
+            Rectangle li ti wi hi = grInkExtent
+            Rectangle lp tp wp hp = grPositioningExtent
+
             calculateOffsetAdjustment pos min_ink min_positioning size_positioning size_screen  = fromIntegral $
                         case pos of
                               Min -> min_ink - min_positioning
@@ -137,16 +140,11 @@ If xPos is Max, we want:
                 translate (fi . negate $ li) (fi . negate $ ti)
                 grRender
 
-
-
-
-
-
         maybeDo (setClassHint ptr) classHint
         maybeDo (setHideUponMouseEvent ptr) hideUponMouseEvent
         
         rendererPtr <- setRenderer ptr finalRenderer
-        handlerPtr <- traverseMaybe (setMouseEventCB ptr) mouseEventCB
+        handlerPtr <- traverseMaybe (setMouseEventCB aosd) mouseEventCB
 
 
 
@@ -155,17 +153,16 @@ If xPos is Max, we want:
 
         return (AosdStructOwnedData rendererPtr handlerPtr)
 
+-- | Does *NOT* free the old handler
 setRenderer :: Ptr C'Aosd -> Render () -> IO (StablePtr (Cairo -> IO ()))
 setRenderer ptr renderer = tunnelCallback theC'AosdRenderer (c'aosd_set_renderer ptr) f
     where
         f = runReaderT . runRender $ renderer
 
--- | A 'FunPtr' to 'theAosdRenderer'.
 {-# NOINLINE theC'AosdRenderer #-}
 theC'AosdRenderer :: UniversalCallback Cairo
 theC'AosdRenderer = unsafePerformIO $ mkUniversalCallback mk'AosdRenderer
 
--- | A 'FunPtr' to 'theAosdMouseEventCb'
 {-# NOINLINE theC'AosdMouseEventCb #-}
 theC'AosdMouseEventCb :: UniversalCallback (Ptr C'AosdMouseEvent)
 theC'AosdMouseEventCb = unsafePerformIO $ mkUniversalCallback mk'AosdMouseEventCb
@@ -183,12 +180,14 @@ setClassHint a XClassHint{ resName, resClass } =
 setHideUponMouseEvent :: Ptr C'Aosd -> Bool -> IO ()
 setHideUponMouseEvent a b = c'aosd_set_hide_upon_mouse_event a (if b then 1 else 0)
 
-setMouseEventCB :: Ptr C'Aosd -> MouseEventHandler -> IO (StablePtr (Ptr C'AosdMouseEvent -> IO ()))
-setMouseEventCB ptr handler = tunnelCallback theC'AosdMouseEventCb (c'aosd_set_mouse_event_cb ptr) f
+-- | Does *NOT* free the old handler.
+-- Must *NOT* access the aosdStructOwnedDataVar of the AosdPtr argument (-> deadlock).
+setMouseEventCB :: AosdPtr -> MouseEventHandler -> IO (StablePtr (Ptr C'AosdMouseEvent -> IO ()))
+setMouseEventCB aosd@AosdPtr {unAosdPtr=ptr} handler = tunnelCallback theC'AosdMouseEventCb (c'aosd_set_mouse_event_cb ptr) f
     where
         f eventp = do
             event <- peek eventp
-            handler event
+            handler aosd event
 
 
 -- | Main high-level displayer. Blocks.
@@ -197,18 +196,27 @@ aosdFlash a FlashDurations{..} = wrapAosd (\p -> c'aosd_flash p inMillis fullMil
 
 data AosdPtr = AosdPtr               { unAosdPtr :: !(Ptr C'Aosd)
                                         -- We only keep this around for deallocating
-                                     , aosdStructOwnedDataVar :: !(MVar AosdStructOwnedData)
+                                     , aosdStructOwnedDataVar :: !(MVar (Maybe AosdStructOwnedData))
                                      , display :: Display
                                      }
 
-aosdNew :: (AosdRenderer renderer) => AosdOptions -> renderer -> IO AosdPtr
-aosdNew opts r = do
+
+aosdNew0 :: IO AosdPtr
+aosdNew0 = do
     display <- openDisplay ""
     unAosdPtr <- c'aosd_new_debug "aosdNew"
-    z <- reconfigure0 display opts r unAosdPtr
-    aosdStructOwnedDataVar <- newMVar z
+    aosdStructOwnedDataVar <- newMVar Nothing
 
     return AosdPtr {unAosdPtr,aosdStructOwnedDataVar,display}
+
+
+aosdNew :: (AosdRenderer renderer) => AosdOptions -> renderer -> IO AosdPtr
+aosdNew opts r = do
+    aosd <- aosdNew0 
+    z <- reconfigure0 opts r aosd
+    modifyMVar_ (aosdStructOwnedDataVar aosd) (\x -> assert (isNothing x) $ return (Just z))
+
+    return aosd
 
 
 
@@ -219,11 +227,11 @@ reconfigure :: (AosdRenderer renderer) =>
      -> AosdPtr
      -> IO ()
 
-reconfigure opts r AosdPtr {unAosdPtr,aosdStructOwnedDataVar,display} = modifyMVar_ aosdStructOwnedDataVar
+reconfigure opts r aosd@AosdPtr {aosdStructOwnedDataVar} = modifyMVar_ aosdStructOwnedDataVar
     (\zOld -> do
-        zNew <- reconfigure0 display opts r unAosdPtr
-        freeAosdStructOwnedData "reconfigure" zOld
-        return zNew)
+        zNew <- reconfigure0 opts r aosd
+        maybeDo (freeAosdStructOwnedData "reconfigure") zOld
+        return (Just zNew))
 
 wrapAosd :: (Ptr C'Aosd -> c) -> AosdPtr -> c
 wrapAosd f = f . unAosdPtr 
@@ -260,11 +268,12 @@ freeAosdStructOwnedData cxt (AosdStructOwnedData sp_r sp_h) = do
     maybeDo (freeStablePtrDebug cxt "mouse event handler") sp_h
 
 aosdDestroy :: AosdPtr -> IO ()
-aosdDestroy AosdPtr {unAosdPtr,aosdStructOwnedDataVar,display} = mask_ $ do
-    c'aosd_destroy_debug "aosdDestroy" unAosdPtr
-    z <- readMVar aosdStructOwnedDataVar
-    freeAosdStructOwnedData "aosdDestroy" z
-    closeDisplay display
+aosdDestroy AosdPtr {unAosdPtr, aosdStructOwnedDataVar, display} = 
+    modifyMVar_ aosdStructOwnedDataVar $ \z -> do
+        c'aosd_destroy_debug "aosdDestroy" unAosdPtr
+        maybeDo (freeAosdStructOwnedData "aosdDestroy") z
+        closeDisplay display
+        return Nothing
 
 
 -- | 'aosdNew'/'aosdDestroy' bracket. Leaking the 'AosdPtr' out of the third argument leads to undefined behaviour. 
