@@ -26,7 +26,6 @@ module Graphics.Aosd(
     ) where
 
 import Control.Concurrent.MVar
-import Control.Exception
 import Control.Monad.Trans.Reader
 import Foreign.C
 import Foreign.Ptr
@@ -64,23 +63,10 @@ c'aosd_destroy_debug cxt p = do
     putDebugMemory cxt ("c'aosd_destroy "++show p)
     c'aosd_destroy p
 
-withAosd :: (Ptr C'Aosd -> IO a) -> IO a
-withAosd = bracket (c'aosd_new_debug "withAosd") (c'aosd_destroy_debug "withAosd")
-
 type Render0 = Cairo -> IO ()
 
 
 
-
-withConfiguredAosd :: (AosdRenderer renderer) =>
-                                                 AosdOptions -> renderer
-                                              -> (Ptr C'Aosd -> IO a)
-                                              -> IO a
-withConfiguredAosd opts x k =
-    withAosd (\a -> do
-        z <- reconfigure0 opts x a
-        k a `finally` freeAosdStructOwnedData "withConfiguredAosd" z 
-    )
 
 
 
@@ -203,15 +189,11 @@ setMouseEventCB a f = do
 
 
 -- | Main high-level displayer. Blocks.
-aosdFlash :: (AosdRenderer a) => AosdOptions -> a -> FlashDurations -> IO ()
-aosdFlash opts renderer durations = withConfiguredAosd opts renderer (aosdFlash' durations)
-
-
-aosdFlash' :: FlashDurations -> Ptr C'Aosd -> IO ()
-aosdFlash' FlashDurations{..} a = (c'aosd_flash a inMillis fullMillis outMillis)
+aosdFlash :: AosdForeignPtr -> FlashDurations -> IO ()
+aosdFlash a FlashDurations{..} = wrapAosd (\p -> c'aosd_flash p inMillis fullMillis outMillis) a
 
 data AosdForeignPtr = AosdForeignPtr { unAosdPtr :: !(Ptr C'Aosd)
-                                        -- This has the sole purpose of keeping the AosdStructOwnedData alive
+                                        -- We only keep this around for deallocating
                                      , aosdStructOwnedDataVar :: !(MVar AosdStructOwnedData)
                                      }
 
@@ -220,25 +202,6 @@ aosdNew opts r = do
     unAosdPtr <- c'aosd_new_debug "aosdNew"
     z <- reconfigure0 opts r unAosdPtr
     aosdStructOwnedDataVar <- newMVar z
-
-    {-
-        The ForeignPtr C'Aosd should keep the reference to its AosdStructOwnedData alive.
-        Otherwise, something like this could access already freed memory:
-
-            do
-                thunk <- do 
-                        aosd <- aosdNew defaultOpts debugRenderer  
-                        return (aosdShow aosd) 
-
-                -- @thunk@ only references @unAosdPtr aosd@, not @aosdStructOwnedDataVar aosd@!
-                -- (The reference from the Aosd struct to the StablePtrs is only on the C side)
-                --
-                -- ... the @AosdStructOwnedData@ produced in aosdNew is finalized (the StablePtrs in it are freed) ...
-
-                thunk -- Causes the C side to pass a dead StablePtr back to @theC'AosdRenderer@!
-
-
-    -}
 
     return AosdForeignPtr {unAosdPtr,aosdStructOwnedDataVar}
 
@@ -257,24 +220,26 @@ reconfigure opts r (AosdForeignPtr fp var) = modifyMVar_ var
         freeAosdStructOwnedData "reconfigure" zOld
         return zNew)
 
+wrapAosd :: (Ptr C'Aosd -> c) -> AosdForeignPtr -> c
+wrapAosd f = f . unAosdPtr 
 
 aosdRender :: AosdForeignPtr -> IO ()
-aosdRender = (c'aosd_render) . unAosdPtr
+aosdRender = wrapAosd c'aosd_render
 
 aosdShow :: AosdForeignPtr -> IO ()
-aosdShow = (c'aosd_show) . unAosdPtr
+aosdShow = wrapAosd c'aosd_show
 
 aosdHide :: AosdForeignPtr -> IO ()
-aosdHide = (c'aosd_hide) . unAosdPtr
+aosdHide = wrapAosd c'aosd_hide
 
 aosdLoopOnce :: AosdForeignPtr -> IO ()
-aosdLoopOnce = (c'aosd_loop_once) . unAosdPtr
+aosdLoopOnce = wrapAosd c'aosd_loop_once
 
 aosdLoopFor ::
         AosdForeignPtr
      -> CUInt -- ^ Time in milliseconds.
      -> IO ()
-aosdLoopFor (AosdForeignPtr fp _) millis = c'aosd_loop_for fp millis
+aosdLoopFor a millis = wrapAosd (flip c'aosd_loop_for millis) a
 
 
 data AosdStructOwnedData = AosdStructOwnedData !(StablePtr (Cairo -> IO ()))
