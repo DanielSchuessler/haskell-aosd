@@ -10,9 +10,14 @@ import Control.Monad
 import Foreign.Concurrent
 import Foreign.Ptr
 import Foreign.ForeignPtr(ForeignPtr)
+import Data.Functor
 
 maybeDo :: Monad m => (a -> m ()) -> Maybe a -> m ()
 maybeDo f = maybe (return ()) f
+
+traverseMaybe :: Monad m => (t -> m a) -> Maybe t -> m (Maybe a)
+traverseMaybe f Nothing = return Nothing
+traverseMaybe f (Just x) = Just `liftM` f x
 
 (^+^) ::  (Num t) => (t, t) -> (t, t) -> (t, t)
 (x,y) ^+^ (x',y') = (x+x',y+y')
@@ -105,3 +110,5 @@ newForeignPtrDebug cxt descr finalizer p = do
                     finalizer)
     putDebugMemory cxt ("Created "++descr++" ForeignPtr: "++show fp)
     return fp
+
+

@@ -24,7 +24,8 @@ main = mapM_ run ( $(functionExtractor "Test$") :: [(String,IO ())] )
             aosdHide header
             aosdLoopOnce header
 
-go t r = aosdFlash defaultOpts r (symDurations 100 t) 
+go t r = withAosd defaultOpts r (\a -> aosdFlash a (symDurations 100 t)) 
+
 goText t f pm = go t (f (textRenderer pm))
 
 tagsMarkup = pUnlines $(listE [ appE (varE (mkName n)) (litE (stringL n)) | n <- words "pBold pBig pItalic pStrikethrough pSmall pSub pSup pUnderline pMono"]) 
@@ -62,11 +63,11 @@ alignmentsTest = do
 leftOverflowTest =
     sequence_ [ do
                  print ("xPos",xPos)
-                 aosdFlash 
+                 withAosd  
                     (defaultOpts {xPos}) 
                     (textRenderer txt) 
                         { alignment = Just AlignRight, width = Just 300, wrapMode = Just WrapWholeWords } 
-                    (symDurations 100 3000)
+                    (flip aosdFlash (symDurations 100 3000))
                | xPos <- [Center,Min,Max] ]
 
  where
@@ -89,7 +90,7 @@ posTest = forEachPos f
     where
         f xPos yPos = do
                     let tr = (textRenderer (pText $ show (xPos,yPos))) { colour = red } 
-                    aosdFlash defaultOpts { xPos, yPos } tr (symDurations 500 dur)  
+                    withAosd defaultOpts { xPos, yPos } tr (flip aosdFlash (symDurations 500 dur))
 
 forEachPos f = do
 
@@ -110,7 +111,7 @@ prStatus = liftIO . print =<< status
 
 circleTest = forEachPos doCircle
 
-doCircle xPos yPos = aosdFlash defaultOpts { xPos, yPos } GeneralRenderer{..} (symDurations 100 2000)
+doCircle xPos yPos = withAosd defaultOpts { xPos, yPos } GeneralRenderer{..} (flip aosdFlash (symDurations 100 2000))
     where
         grInkExtent = Rectangle (-r) (-r) (2*r) (2*r)
         grPositioningExtent = Rectangle (-r_half) (-r_half) r r 
