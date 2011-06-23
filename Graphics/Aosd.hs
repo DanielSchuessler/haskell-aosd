@@ -8,11 +8,13 @@ module Graphics.Aosd(
 --     HCatRenderer(..), VCatRenderer(..),
     -- * Options
     AosdOptions(..), Transparency(..), Position(..), XClassHint(..), defaultOpts,
+    -- * Construction/destruction
+    AosdPtr,aosdNew,aosdDestroy,
     -- * Displaying
     aosdFlash,
     FlashDurations(..), symDurations,
     -- ** Low-level operations
-    AosdForeignPtr,aosdNew,aosdDestroy,reconfigure,
+    reconfigure,
     aosdRender, aosdShow, aosdHide, aosdLoopOnce, aosdLoopFor,
 
     -- * Diagnostics
@@ -191,23 +193,23 @@ setMouseEventCB a f = do
 
 
 -- | Main high-level displayer. Blocks.
-aosdFlash :: AosdForeignPtr -> FlashDurations -> IO ()
+aosdFlash :: AosdPtr -> FlashDurations -> IO ()
 aosdFlash a FlashDurations{..} = wrapAosd (\p -> c'aosd_flash p inMillis fullMillis outMillis) a
 
-data AosdForeignPtr = AosdForeignPtr { unAosdPtr :: !(Ptr C'Aosd)
+data AosdPtr = AosdPtr               { unAosdPtr :: !(Ptr C'Aosd)
                                         -- We only keep this around for deallocating
                                      , aosdStructOwnedDataVar :: !(MVar AosdStructOwnedData)
                                      , display :: Display
                                      }
 
-aosdNew :: (AosdRenderer renderer) => AosdOptions -> renderer -> IO AosdForeignPtr
+aosdNew :: (AosdRenderer renderer) => AosdOptions -> renderer -> IO AosdPtr
 aosdNew opts r = do
     display <- openDisplay ""
     unAosdPtr <- c'aosd_new_debug "aosdNew"
     z <- reconfigure0 display opts r unAosdPtr
     aosdStructOwnedDataVar <- newMVar z
 
-    return AosdForeignPtr {unAosdPtr,aosdStructOwnedDataVar,display}
+    return AosdPtr {unAosdPtr,aosdStructOwnedDataVar,display}
 
 
 
@@ -215,32 +217,32 @@ aosdNew opts r = do
 reconfigure :: (AosdRenderer renderer) =>
         AosdOptions
      -> renderer
-     -> AosdForeignPtr
+     -> AosdPtr
      -> IO ()
 
-reconfigure opts r AosdForeignPtr {unAosdPtr,aosdStructOwnedDataVar,display} = modifyMVar_ aosdStructOwnedDataVar
+reconfigure opts r AosdPtr {unAosdPtr,aosdStructOwnedDataVar,display} = modifyMVar_ aosdStructOwnedDataVar
     (\zOld -> do
         zNew <- reconfigure0 display opts r unAosdPtr
         freeAosdStructOwnedData "reconfigure" zOld
         return zNew)
 
-wrapAosd :: (Ptr C'Aosd -> c) -> AosdForeignPtr -> c
+wrapAosd :: (Ptr C'Aosd -> c) -> AosdPtr -> c
 wrapAosd f = f . unAosdPtr 
 
-aosdRender :: AosdForeignPtr -> IO ()
+aosdRender :: AosdPtr -> IO ()
 aosdRender = wrapAosd c'aosd_render
 
-aosdShow :: AosdForeignPtr -> IO ()
+aosdShow :: AosdPtr -> IO ()
 aosdShow = wrapAosd c'aosd_show
 
-aosdHide :: AosdForeignPtr -> IO ()
+aosdHide :: AosdPtr -> IO ()
 aosdHide = wrapAosd c'aosd_hide
 
-aosdLoopOnce :: AosdForeignPtr -> IO ()
+aosdLoopOnce :: AosdPtr -> IO ()
 aosdLoopOnce = wrapAosd c'aosd_loop_once
 
 aosdLoopFor ::
-        AosdForeignPtr
+        AosdPtr
      -> CUInt -- ^ Time in milliseconds.
      -> IO ()
 aosdLoopFor a millis = wrapAosd (flip c'aosd_loop_for millis) a
@@ -254,8 +256,8 @@ freeAosdStructOwnedData :: String -> AosdStructOwnedData -> IO ()
 freeAosdStructOwnedData cxt (AosdStructOwnedData sp_r) = do
     freeStablePtrDebug cxt "renderer" sp_r
 
-aosdDestroy :: AosdForeignPtr -> IO ()
-aosdDestroy AosdForeignPtr {unAosdPtr,aosdStructOwnedDataVar,display} = mask_ $ do
+aosdDestroy :: AosdPtr -> IO ()
+aosdDestroy AosdPtr {unAosdPtr,aosdStructOwnedDataVar,display} = mask_ $ do
     c'aosd_destroy_debug "aosdDestroy" unAosdPtr
     z <- readMVar aosdStructOwnedDataVar
     freeAosdStructOwnedData "aosdDestroy" z
