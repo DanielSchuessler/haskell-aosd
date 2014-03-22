@@ -30,9 +30,7 @@ module Graphics.Aosd.Pango(
     
     ) where
 
-import Control.Monad.IO.Class
-import Foreign.C
-import Graphics.Aosd
+import Graphics.Aosd hiding(width)
 import Graphics.Aosd.Util
 import Graphics.Rendering.Pango.Cairo
 import Graphics.Rendering.Pango.Enums
