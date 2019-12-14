@@ -112,7 +112,7 @@ If xPos is Max, we want:
 
 -- | Must *NOT* access the aosdStructOwnedDataVar of the AosdPtr argument (-> deadlock).
 reconfigure0 :: (AosdRenderer renderer) => AosdOptions -> renderer -> AosdPtr -> IO AosdStructOwnedData
-reconfigure0 AosdOptions{..} renderer aosd@AosdPtr {unAosdPtr=ptr, display} = 
+reconfigure0 AosdOptions{..} renderer aosd@AosdPtr {unAosdPtr=ptr, display} =
     do
         GeneralRenderer{..} <- toGeneralRenderer renderer
 
@@ -142,7 +142,7 @@ reconfigure0 AosdOptions{..} renderer aosd@AosdPtr {unAosdPtr=ptr, display} =
 
         maybeDo (setClassHint ptr) classHint
         maybeDo (setHideUponMouseEvent ptr) hideUponMouseEvent
-        
+
         rendererPtr <- setRenderer ptr finalRenderer
         handlerPtr <- traverseMaybe (setMouseEventCB aosd) mouseEventCB
 
@@ -212,7 +212,7 @@ aosdNew0 = do
 
 aosdNew :: (AosdRenderer renderer) => AosdOptions -> renderer -> IO AosdPtr
 aosdNew opts r = do
-    aosd <- aosdNew0 
+    aosd <- aosdNew0
     z <- reconfigure0 opts r aosd
     modifyMVar_ (aosdStructOwnedDataVar aosd) (\x -> assert (isNothing x) $ return (Just z))
 
@@ -234,7 +234,7 @@ reconfigure opts r aosd@AosdPtr {aosdStructOwnedDataVar} = modifyMVar_ aosdStruc
         return (Just zNew))
 
 wrapAosd :: (Ptr C'Aosd -> c) -> AosdPtr -> c
-wrapAosd f = f . unAosdPtr 
+wrapAosd f = f . unAosdPtr
 
 aosdRender :: AosdPtr -> IO ()
 aosdRender = wrapAosd c'aosd_render
@@ -255,9 +255,9 @@ aosdLoopFor ::
 aosdLoopFor a millis = wrapAosd (flip c'aosd_loop_for millis) a
 
 
-data AosdStructOwnedData = 
-    AosdStructOwnedData 
-        !(StablePtr (Cairo -> IO ())) 
+data AosdStructOwnedData =
+    AosdStructOwnedData
+        !(StablePtr (Cairo -> IO ()))
         !(Maybe (StablePtr (Ptr C'AosdMouseEvent -> IO())))
 
 
@@ -268,7 +268,7 @@ freeAosdStructOwnedData cxt (AosdStructOwnedData sp_r sp_h) = do
     maybeDo (freeStablePtrDebug cxt "mouse event handler") sp_h
 
 aosdDestroy :: AosdPtr -> IO ()
-aosdDestroy AosdPtr {unAosdPtr, aosdStructOwnedDataVar, display} = 
+aosdDestroy AosdPtr {unAosdPtr, aosdStructOwnedDataVar, display} =
     modifyMVar_ aosdStructOwnedDataVar $ \z -> do
         c'aosd_destroy_debug "aosdDestroy" unAosdPtr
         maybeDo (freeAosdStructOwnedData "aosdDestroy") z
@@ -276,6 +276,6 @@ aosdDestroy AosdPtr {unAosdPtr, aosdStructOwnedDataVar, display} =
         return Nothing
 
 
--- | 'aosdNew'/'aosdDestroy' bracket. Leaking the 'AosdPtr' out of the third argument leads to undefined behaviour. 
+-- | 'aosdNew'/'aosdDestroy' bracket. Leaking the 'AosdPtr' out of the third argument leads to undefined behaviour.
 withAosd :: AosdRenderer renderer => AosdOptions -> renderer -> (AosdPtr -> IO c) -> IO c
 withAosd opts ren = bracket (aosdNew opts ren) aosdDestroy

@@ -32,13 +32,13 @@ fi :: (Num b, Integral a) => a -> b
 fi = fromIntegral
 
 rectLeft :: Rectangle -> Int
-rectLeft (Rectangle a _ _ _) = a 
+rectLeft (Rectangle a _ _ _) = a
 rectTop :: Rectangle -> Int
-rectTop (Rectangle _ a _ _) = a 
+rectTop (Rectangle _ a _ _) = a
 rectWidth :: Rectangle -> Int
-rectWidth (Rectangle _ _ a _) = a 
+rectWidth (Rectangle _ _ a _) = a
 rectHeight :: Rectangle -> Int
-rectHeight (Rectangle _ _ _ a) = a 
+rectHeight (Rectangle _ _ _ a) = a
 
 rectRight :: Rectangle -> Int
 rectRight r = rectLeft r + rectWidth r
@@ -94,19 +94,19 @@ putStdErr = hPutStrLn stderr
 newStablePtrDebug :: String -> String -> a -> IO (StablePtr a)
 newStablePtrDebug cxt descr a = do
     sp <- newStablePtr a
-    putDebugMemory cxt ("Created "++descr++" StablePtr: "++showStablePtr sp) 
+    putDebugMemory cxt ("Created "++descr++" StablePtr: "++showStablePtr sp)
     return sp
 
 freeStablePtrDebug :: String -> String -> StablePtr a -> IO ()
 freeStablePtrDebug cxt descr sp = do
-    putDebugMemory cxt ("Freeing "++descr++" StablePtr: "++showStablePtr sp) 
+    putDebugMemory cxt ("Freeing "++descr++" StablePtr: "++showStablePtr sp)
     freeStablePtr sp
 
 newForeignPtrDebug :: String -> String -> IO () -> Ptr a -> IO (ForeignPtr a)
 newForeignPtrDebug cxt descr finalizer p = do
-    fp <- newForeignPtr p 
+    fp <- newForeignPtr p
                 (do
-                    putDebugMemory "ForeignPtr finalizer" ("Finalizing "++descr++" ForeignPtr made in "++cxt)   
+                    putDebugMemory "ForeignPtr finalizer" ("Finalizing "++descr++" ForeignPtr made in "++cxt)
                     finalizer)
     putDebugMemory cxt ("Created "++descr++" ForeignPtr: "++show fp)
     return fp

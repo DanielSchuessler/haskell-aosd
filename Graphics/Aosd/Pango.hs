@@ -26,8 +26,8 @@ module Graphics.Aosd.Pango(
     module Data.Monoid,
     module Data.Colour.Names
 
-    
-    
+
+
     ) where
 
 import Graphics.Aosd hiding(width)
@@ -69,7 +69,7 @@ data TextRenderer = TextRenderer {
 }
 
 data Width = Unlimited -- ^ The layout will be as wide as necessary to hold all the lines without wrapping
-           | Width Double -- ^ The layout will be wrapped (according to 'wrapMode') to the given width in Pango units 
+           | Width Double -- ^ The layout will be wrapped (according to 'wrapMode') to the given width in Pango units
     deriving(Show,Eq)
 
 unsup :: String -> t
@@ -110,7 +110,7 @@ textRenderer t = TextRenderer {
 
 -- | Plain text or some Pango markup. Suggestion: Use &#123;-\# LANGUAGE OverloadedStrings \#-&#125;.
 data PangoText = PlainText ShowS
-               | PangoMarkup ShowS 
+               | PangoMarkup ShowS
                | Empty
 
 toMarkup :: PangoText -> ShowS
@@ -118,7 +118,7 @@ toMarkup (PlainText s) = showString (escapeMarkup (s ""))
 toMarkup (PangoMarkup s) = s
 toMarkup Empty = mempty
 
--- | Uses 'pText' (not 'pRaw'). 
+-- | Uses 'pText' (not 'pRaw').
 instance IsString PangoText where
     fromString = pText
 
@@ -129,7 +129,7 @@ instance Monoid PangoText where
     mempty = Empty
     mappend Empty x2 = x2
     mappend x1 Empty = x1
-    mappend (PlainText s1) (PlainText s2) = PlainText (s1 . s2) 
+    mappend (PlainText s1) (PlainText s2) = PlainText (s1 . s2)
     mappend x1 x2 = PangoMarkup (toMarkup x1 . toMarkup x2)
 
 instance Show PangoText where
@@ -175,10 +175,10 @@ pSized pt = pSpan [FontSize (SizePoint pt)]
 
 pTag :: String -- ^ Tag name
         -> PangoText -> PangoText
-pTag tagName inner = PangoMarkup $ 
-    showChar '<' . showString tagName . showChar '>' . 
-    toMarkup inner . 
-    showString "</" . showString tagName . showChar '>' 
+pTag tagName inner = PangoMarkup $
+    showChar '<' . showString tagName . showChar '>' .
+    toMarkup inner .
+    showString "</" . showString tagName . showChar '>'
 
 pBold :: PangoText -> PangoText
 pBold = pTag "b"
@@ -197,25 +197,25 @@ pSub = pTag "sub"
 -- | Superscript
 pSup :: PangoText -> PangoText
 pSup = pTag "sup"
-	
+
 pSmall :: PangoText -> PangoText
 pSmall = pTag "small"
-	
+
 -- | Monospace font
 pMono :: PangoText -> PangoText
 pMono = pTag "tt"
-	
 
--- | Underline 
+
+-- | Underline
 pUnderline :: PangoText -> PangoText
 pUnderline = pTag "u"
-	
 
 
 
 
-    
-                                   
+
+
+
 layoutSetWidth' :: PangoLayout -> Width -> IO ()
 layoutSetWidth' layout w = layoutSetWidth layout (case w of
                                                        Unlimited -> Nothing
@@ -230,12 +230,12 @@ instance AosdRenderer TextRenderer where
 
     case tcText of
          Empty -> return ()
-         PlainText s -> layoutSetText layout (s "") 
+         PlainText s -> layoutSetText layout (s "")
          PangoMarkup s -> void (layoutSetMarkup layout (s "") :: IO String)
 
-    let go :: (PangoLayout -> a -> IO ()) -> Maybe a -> IO () 
+    let go :: (PangoLayout -> a -> IO ()) -> Maybe a -> IO ()
         go f = maybeDo (f layout)
-        
+
 
     go layoutSetWidth' width
     go layoutSetWrap wrapMode
@@ -253,7 +253,7 @@ instance AosdRenderer TextRenderer where
             showLayout layout
 
 
-    return GeneralRenderer { grInkExtent, grPositioningExtent, grRender = render } 
+    return GeneralRenderer { grInkExtent, grPositioningExtent, grRender = render }
 
 
 
@@ -262,17 +262,17 @@ instance AosdRenderer TextRenderer where
 -- getSize l = do
 --     -- (ink,logical)
 --     a@(Rectangle xi yi wi hi, Rectangle xl yl wl hl) <- layoutGetPixelExtents l
--- 
+--
 --     --     print ("ink",fst a)
 --     --     print ("logical",snd a)
--- 
+--
 --     let w = max (xi+wi) (xl+wl)
 --         h = max (yi+hi) (yl+hl)
--- 
--- 
+--
+--
 --     return (fi w, fi h)
--- 
+--
 --   where
 --     fi = fromIntegral
--- 
--- 
+--
+--

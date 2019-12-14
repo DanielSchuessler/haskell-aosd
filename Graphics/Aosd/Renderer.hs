@@ -23,7 +23,7 @@ data GeneralRenderer = GeneralRenderer {
     -- (Likewise for the /y/ axis)
     grPositioningExtent :: Rectangle
 }
- 
+
 instance AosdRenderer GeneralRenderer where
     toGeneralRenderer = return
 

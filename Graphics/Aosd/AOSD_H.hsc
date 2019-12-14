@@ -11,7 +11,7 @@ import Graphics.Rendering.Cairo.Types
 
 #opaque_t Aosd
 
-#integral_t AosdCoordinate 
+#integral_t AosdCoordinate
 #num COORDINATE_MINIMUM
 #num COORDINATE_CENTER
 #num COORDINATE_MAXIMUM
@@ -38,9 +38,9 @@ import Graphics.Rendering.Cairo.Types
 #field res_class, CString
 #stoptype
 
-#ccall aosd_new, IO (Ptr <Aosd>) 
+#ccall aosd_new, IO (Ptr <Aosd>)
 #ccall aosd_destroy, Ptr <Aosd> -> IO ()
- 
+
 -- * object configurators
 
 #ccall aosd_set_name, Ptr <Aosd> -> Ptr <XClassHint> -> IO ()

@@ -23,7 +23,7 @@ Description:
  .
  main = do
  \    withAosd
- \        defaultOpts 
+ \        defaultOpts
  \        (textRenderer markup) &#123; alignment = Just AlignCenter, colour = orange &#125;
  \        (\a -> aosdFlash a (symDurations 3000 3000))
  @
