@@ -122,6 +122,9 @@ toMarkup Empty = mempty
 instance IsString PangoText where
     fromString = pText
 
+instance Semigroup PangoText where
+    (<>) = mappend
+
 instance Monoid PangoText where
     mempty = Empty
     mappend Empty x2 = x2
@@ -218,8 +221,6 @@ layoutSetWidth' layout w = layoutSetWidth layout (case w of
                                                        Unlimited -> Nothing
                                                        Width x -> Just x)
 
-
-
 instance AosdRenderer TextRenderer where
   toGeneralRenderer TextRenderer{..}  = do
     fm <- cairoFontMapGetDefault
@@ -230,7 +231,7 @@ instance AosdRenderer TextRenderer where
     case tcText of
          Empty -> return ()
          PlainText s -> layoutSetText layout (s "") 
-         PangoMarkup s -> void (layoutSetMarkup layout (s ""))
+         PangoMarkup s -> void (layoutSetMarkup layout (s "") :: IO String)
 
     let go :: (PangoLayout -> a -> IO ()) -> Maybe a -> IO () 
         go f = maybeDo (f layout)
