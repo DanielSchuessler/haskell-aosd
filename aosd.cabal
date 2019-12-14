@@ -41,8 +41,8 @@ Extra-source-files:  test/test.hs
 Cabal-version:       >=1.10
 
 source-repository head
-  type:     hg
-  location: https://dschuessler@bitbucket.org/dschuessler/haskell-aosd
+  type:     git
+  location: https://github.com/DanielSchuessler/haskell-aosd
 
 Flag DebugMemory
     Default: False
